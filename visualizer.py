@@ -1,11 +1,11 @@
-# visualizer.py
-
+import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLUT import *
-from OpenGL.GLU import *
-import math
 from scipy.spatial import Delaunay
+from OpenGL.GL import *
+from OpenGL.GLUT import *
 import numpy as np
+import scipy.spatial
 
 class Visualizer:
     def __init__(self, system, width=800, height=600):
@@ -13,56 +13,61 @@ class Visualizer:
         self.width = width
         self.height = height
 
-    def draw_circle(self, x, y, radius, aspect_ratio, segments=50):
-        glBegin(GL_TRIANGLE_FAN)
-        glVertex2f(x, y)
-        for i in range(segments + 1):
-            angle = 2 * math.pi * i / segments
-            glVertex2f(x + math.cos(angle) * radius / aspect_ratio, y + math.sin(angle) * radius)
-        glEnd()
-
-    def draw_delaunay_triangulation(self):
-        points = np.array([(circle.x, circle.y) for circle in self.system.circles])
-        tri = Delaunay(points)
-        glColor3f(1.0, 0.0, 0.0)
-        for simplex in tri.simplices:
-            for i in range(3):
-                for j in range(i + 1, 3):
-                    x1, y1 = points[simplex[i]]
-                    x2, y2 = points[simplex[j]]
-                    glBegin(GL_LINES)
-                    glVertex2f(x1, y1)
-                    glVertex2f(x2, y2)
-                    glEnd()
-
-    def display(self):
-        glClear(GL_COLOR_BUFFER_BIT)
-        glColor3f(1.0, 1.0, 1.0)
-        aspect_ratio = self.width / self.height
-        for circle in self.system.circles:
-            self.draw_circle(circle.x, circle.y, circle.radius, aspect_ratio)
-        self.draw_delaunay_triangulation()
-        glutSwapBuffers()
-
-    def reshape(self, w, h):
-        self.width, self.height = w, h
-        glViewport(0, 0, w, h)
+    def init_gl(self):
+        """Инициализация OpenGL"""
+        glClearColor(0.0, 0.0, 0.0, 1.0)
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        min_x = min(self.system.circles, key=lambda c: c.x).x
-        max_x = max(self.system.circles, key=lambda c: c.x).x
-        min_y = min(self.system.circles, key=lambda c: c.y).y
-        max_y = max(self.system.circles, key=lambda c: c.y).y
-        margin = 0.1
-        glOrtho(min_x - margin, max_x + margin, min_y - margin, max_y + margin, -1.0, 1.0)
-        glutPostRedisplay()
+        glOrtho(-1, 1, -1, 1, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+
+    def display(self):
+        """Финальная отрисовка"""
+        glClear(GL_COLOR_BUFFER_BIT)
+        glLoadIdentity()
+
+        glColor3f(0.4, 0.6, 1.0)
+        positions = self.system.positions.detach().cpu().numpy()
+
+        for x, y in positions:
+            self.draw_circle(x, y, self.system.particle_radius)
+
+        # Триангуляция
+        if len(positions) > 2:
+            self.draw_delaunay(positions)
+
+        glutSwapBuffers()
+
+    def draw_circle(self, cx, cy, radius, num_segments=20):
+        """Отрисовка круга"""
+        glBegin(GL_TRIANGLE_FAN)
+        glVertex2f(cx, cy)
+        for i in range(num_segments + 1):
+            angle = 2.0 * np.pi * i / num_segments
+            x = cx + radius * np.cos(angle)
+            y = cy + radius * np.sin(angle)
+            glVertex2f(x, y)
+        glEnd()
+
+    def draw_delaunay(self, points):
+        """Отрисовка триангуляции"""
+        tri = scipy.spatial.Delaunay(points)
+        glColor3f(1.0, 1.0, 1.0)
+        glBegin(GL_LINES)
+        for simplex in tri.simplices:
+            for i in range(3):
+                p1, p2 = points[simplex[i]], points[simplex[(i + 1) % 3]]
+                glVertex2f(p1[0], p1[1])
+                glVertex2f(p2[0], p2[1])
+        glEnd()
 
     def start(self):
+        """Запуск OpenGL"""
         glutInit()
         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB)
         glutInitWindowSize(self.width, self.height)
-        glutCreateWindow(b"OpenGL Circles")
+        glutCreateWindow(b"Particle System")
+        self.init_gl()
         glutDisplayFunc(self.display)
-        glutReshapeFunc(self.reshape)
-        glClearColor(0.0, 0.0, 0.0, 1.0)
+        glutIdleFunc(glutPostRedisplay)  # Обновление кадра
         glutMainLoop()
