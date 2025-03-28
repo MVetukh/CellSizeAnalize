@@ -40,18 +40,18 @@ class ParticleSystem:
                 sigma = self.radius
                 lj_potential = 4 * ((sigma / r) ** 12 - (sigma / r) ** 6)
 
-                # Добавление экспоненциального отталкивания при r < 2 * sigma
-                if r < 2 * self.radius:
-                    repulsion = np.exp(2 * self.radius - r)
-                else:
-                    repulsion = 0
+                # # Добавление экспоненциального отталкивания при r < 2 * sigma
+                # if r < 2 * self.radius:
+                #     repulsion = np.exp(2 * self.radius - r)
+                # else:
+                #     repulsion = 0
 
-                energy += lj_potential + repulsion
+                energy += lj_potential #+ repulsion
 
                 if DEBUG:
                     print(
-                        f"Pair ({i}, {j}): r = {r:.5f}, LJ = {lj_potential:.5f}, Repulsion = {repulsion:.5f}, Total E = {energy:.5f}")
-
+                        f"Pair ({i}, {j}): r = {r:.5f}, LJ = {lj_potential:.5f},, Total E = {energy:.5f}")
+        #  Repulsion = {repulsion:.5f}
         return energy
 
     def compute_gradient(self, positions_flat, DEBUG=False):
@@ -74,8 +74,8 @@ class ParticleSystem:
 
                 # Производная отталкивающего потенциала
                 repulsion_force = 0
-                if r < 2 * self.radius:
-                    repulsion_force = np.exp(2 * self.radius - r) / r
+                # if r < 2 * self.radius:
+                #     repulsion_force = np.exp(2 * self.radius - r) / r
 
                 total_force = lj_force + repulsion_force
                 grad_i = total_force * dx
@@ -104,11 +104,11 @@ class EnergyMinimizer:
         # Начальные настройки (константы заданы внутри функции)
         x = self.system.positions.flatten()
         lr = 1e-3  # начальный learning rate
-        momentum_coef = 0.9  # коэффициент momentum
+        momentum_coef = 0.6  # коэффициент momentum
         velocity = np.zeros_like(x)  # инициализация скорости (momentum)
         maxiter = 1000  # максимальное число итераций
-        tol = 1e-16  # порог изменения энергии для адаптации lr
-        gtol = 1e-12  # порог нормы градиента для сходимости
+        tol = 1e-9 # порог изменения энергии для адаптации lr
+        gtol = 1e-8  # порог нормы градиента для сходимости
 
         energy_prev = self.system.compute_energy(x)
 
