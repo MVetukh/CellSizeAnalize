@@ -4,7 +4,13 @@ import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay,Voronoi
+from scipy import stats
+from libpysal.weights import W
+from esda.moran import Moran, Moran_BV
+import matplotlib.pyplot as plt
+import networkx as nx
+
 
 # Параметры системы
 N = 200
@@ -103,6 +109,8 @@ def coordinate_descent(positions, sizes, lr=0.005, tol=1e-5, max_iters=1000):
             if step_scale < 1e-4:
                 break
 
+        print("Total energy:", total_energy, "step_scale:", step_scale, "iteration:", iteration)
+
     return positions
 
 
@@ -152,12 +160,89 @@ def draw_triangulation(positions):
     except Exception as e:
         print("Ошибка триангуляции:", e)
 
+#
+# def voronoi_finite_polygons_2d(vor, radius=None):
+#     """
+#     Перестраивает бесконечные регионы диаграммы Вороного в конечные полигоны.
+#
+#     Parameters:
+#         vor (scipy.spatial.Voronoi): исходная диаграмма Вороного.
+#         radius (float, optional): расстояние, на которое «удаляется» бесконечное ребро.
+#                                    Если не задано, вычисляется как 2*макс.размах точек.
+#
+#     Returns:
+#         regions (list of lists): список регионов, каждый регион — список индексов вершин.
+#         vertices (ndarray): массив вершин, включая добавленные для бесконечных областей.
+#     """
+#     if vor.points.shape[1] != 2:
+#         raise ValueError("Функция работает только для 2D данных.")
+#
+#     new_regions = []
+#     new_vertices = vor.vertices.tolist()
+#
+#     center = vor.points.mean(axis=0)
+#     if radius is None:
+#         radius = np.ptp(vor.points, axis=0).max()
+#
+#     # Для каждой точки формируем список рёбер (ridge)
+#     all_ridges = {}
+#     for (p1, p2), (v1, v2) in zip(vor.ridge_points, vor.ridge_vertices):
+#         all_ridges.setdefault(p1, []).append((p2, v1, v2))
+#         all_ridges.setdefault(p2, []).append((p1, v1, v2))
+#
+#     # Перебираем регионы для каждой точки
+#     for p1, region_idx in enumerate(vor.point_region):
+#         vertices_idx = vor.regions[region_idx]
+#         if all(v >= 0 for v in vertices_idx):
+#             # Регион конечный, добавляем как есть
+#             new_regions.append(vertices_idx)
+#             continue
+#
+#         # Для бесконечного региона: начинаем с уже известных конечных вершин
+#         new_region = [v for v in vertices_idx if v >= 0]
+#         # Обрабатываем рёбра, связанные с точкой p1
+#         for p2, v1, v2 in all_ridges[p1]:
+#             # Если одно из рёбер бесконечно (отмечается -1)
+#             if v1 < 0 or v2 < 0:
+#                 # Гарантируем, что v2 — конечная вершина
+#                 if v2 < 0:
+#                     v1, v2 = v2, v1
+#
+#                 # Вычисляем единичный вектор вдоль направления от p1 к p2 (тангенс)
+#                 t = vor.points[p2] - vor.points[p1]
+#                 t /= np.linalg.norm(t)
+#                 # Нормаль к вектору
+#                 n = np.array([-t[1], t[0]])
+#
+#                 # Определяем направление: от центра диаграммы
+#                 midpoint = vor.points[[p1, p2]].mean(axis=0)
+#                 direction = np.sign(np.dot(midpoint - center, n)) * n
+#                 # Вычисляем «далёкую» точку вдоль направления
+#                 far_point = vor.vertices[v2] + direction * radius
+#                 new_region.append(len(new_vertices))
+#                 new_vertices.append(far_point.tolist())
+#
+#         # Сортируем вершины многоугольника по углу относительно центра
+#         vs = np.asarray([new_vertices[v] for v in new_region])
+#         angles = np.arctan2(vs[:, 1] - center[1], vs[:, 0] - center[0])
+#         new_region = [v for _, v in sorted(zip(angles, new_region))]
+#         new_regions.append(new_region)
+#
+#     return new_regions, np.array(new_vertices)
+
+
+
+
+
 
 def draw_final_state(positions, sizes):
     glClear(GL_COLOR_BUFFER_BIT)
-    draw_points(positions, sizes)  # Сначала частицы
-    draw_triangulation(positions)  # Затем триангуляция поверх
+    draw_points(positions, sizes)  # Частицы
+    vor = Voronoi(positions)
+
+    draw_triangulation(positions)  # Триангуляция поверх
     pygame.display.flip()
+
 
 
 def main():
@@ -165,10 +250,12 @@ def main():
     positions = apply_pbc(positions)
     positions = coordinate_descent(positions, sizes, learning_rate, tolerance, max_iters)
 
+    # Визуализация
     pygame.init()
     screen = pygame.display.set_mode((600, 600), DOUBLEBUF | OPENGL)
     init_gl()
     draw_final_state(positions, sizes)
+
 
     running = True
     while running:
@@ -177,7 +264,5 @@ def main():
                 running = False
         pygame.time.wait(100)
     pygame.quit()
-
-
 if __name__ == "__main__":
     main()

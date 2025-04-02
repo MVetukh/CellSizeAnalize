@@ -224,4 +224,66 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    plt.style.use('seaborn-whitegrid')
+
+    # Параметры потенциала
+    epsilon = 1.0  # Глубина потенциальной ямы
+    sigma = 1.0  # Расстояние, где потенциал равен нулю
+
+
+    # Функция потенциала Леннарда-Джонса
+    def lennard_jones(r):
+        return 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
+
+
+    # Создание массива расстояний
+    r = np.linspace(0.9, 3.0, 500)
+    U = lennard_jones(r)
+
+    # Создание фигуры с настройками
+    plt.figure(figsize=(10, 6), dpi=100)
+    plt.rcParams.update({'font.size': 12})
+
+    # Построение графика
+    plt.plot(r, U, lw=3, color='#2E86C1', label='Потенциал Леннарда-Джонса')
+
+    # Разметка осей и заголовок
+    plt.title("Потенциал Леннарда-Джонса", pad=20, fontsize=18, fontweight='bold')
+    plt.xlabel(r'Расстояние $r/\sigma$', fontsize=14, labelpad=10)
+    plt.ylabel(r'Энергия $U/\epsilon$', fontsize=14, labelpad=10)
+    plt.ylim(-1.5, 5)
+
+    # Вертикальные и горизонтальные линии
+    plt.axhline(0, color='gray', lw=1, ls='--')
+    plt.axvline(2 ** (1 / 6), color='#E74C3C', lw=2, ls='--',
+                label=r'Равновесие ($r=2^{1/6}\sigma$)')
+
+    # Аннотации
+    plt.annotate('Зона отталкивания',
+                 xy=(1.0, 3),
+                 xytext=(0.95, 4),
+                 arrowprops=dict(arrowstyle="->", color='black'),
+                 fontsize=12)
+
+    plt.annotate('Зона притяжения',
+                 xy=(1.5, -0.7),
+                 xytext=(1.7, -1.2),
+                 arrowprops=dict(arrowstyle="->", color='black'),
+                 fontsize=12)
+
+    plt.annotate(r'Глубина ямы: $-\epsilon$',
+                 xy=(2 ** (1 / 6), -1),
+                 xytext=(1.8, -1.3),
+                 arrowprops=dict(arrowstyle="->", color='black'),
+                 fontsize=12)
+
+    # Легенда и сетка
+    plt.legend(loc='upper right', frameon=True, shadow=True)
+    plt.grid(True, alpha=0.4)
+
+    # Сохранение в высоком разрешении
+    plt.savefig('LJ_potential.png', bbox_inches='tight', dpi=300)
+    plt.show()

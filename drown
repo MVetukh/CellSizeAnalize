@@ -1,0 +1,190 @@
+
+def analytic_line_intersection(p1, p2, side, bound_value):
+    """
+    Аналитически вычисляет точку пересечения отрезка p1-p2 с границей.
+
+    Параметры:
+        p1, p2 - точки отрезка в виде (x, y)
+        side - тип границы: 'left', 'right', 'bottom', 'top'
+        bound_value - значение координаты границы
+
+    Возвращает точку пересечения или None
+    """
+    x1, y1 = p1
+    x2, y2 = p2
+
+    if side in ['left', 'right']:
+        if x1 == x2:
+            return None
+        t = (bound_value - x1) / (x2 - x1)
+        if 0 <= t <= 1:
+            y = y1 + t * (y2 - y1)
+            return (bound_value, y)
+
+    elif side in ['bottom', 'top']:
+        if y1 == y2:
+            return None
+        t = (bound_value - y1) / (y2 - y1)
+        if 0 <= t <= 1:
+            x = x1 + t * (x2 - x1)
+            return (x, bound_value)
+
+    return None
+
+
+def clip_polygon_against_line(polygon, boundary_func, side, bound_value, pbc=False):
+    """
+    Обрезает полигон по одной границе с учетом периодических условий
+
+    Параметры:
+        polygon - список точек [(x1,y1), ...]
+        boundary_func - функция проверки точки на нахождение внутри
+        side - тип границы ('left', 'right', 'bottom', 'top')
+        bound_value - координата границы
+        pbc - флаг периодических граничных условий
+    """
+    if len(polygon) == 0:
+        return []
+
+    clipped = []
+
+    for i in range(len(polygon)):
+        current = polygon[i]
+        next_pt = polygon[(i + 1) % len(polygon)]
+
+        # Коррекция координат для PBC
+        if pbc:
+            dx = next_pt[0] - current[0]
+            dy = next_pt[1] - current[1]
+            if abs(dx) > 1.0:
+                next_pt = (next_pt[0] - np.sign(dx) * 2.0, next_pt[1])
+            if abs(dy) > 1.0:
+                next_pt = (next_pt[0], next_pt[1] - np.sign(dy) * 2.0)
+
+        current_inside = boundary_func(current)
+        next_inside = boundary_func(next_pt)
+
+        if current_inside:
+            if next_inside:
+                clipped.append(next_pt)
+            else:
+                intersect = analytic_line_intersection(current, next_pt, side, bound_value)
+                if intersect:
+                    clipped.append(intersect)
+        else:
+            if next_inside:
+                intersect = analytic_line_intersection(current, next_pt, side, bound_value)
+                if intersect:
+                    clipped.append(intersect)
+                clipped.append(next_pt)
+
+    return clipped
+
+
+def clip_polygon_to_box(polygon, xmin=-1.0, xmax=1.0, ymin=-1.0, ymax=1.0, pbc=True):
+    """
+    Обрезает полигон по всем границам с учетом PBC
+
+    Параметры:
+        polygon - исходный полигон
+        xmin, xmax, ymin, ymax - границы обрезки
+        pbc - активировать периодические условия
+    """
+
+    def wrap(coord, low, high):
+        """Перенос координаты в основной диапазон"""
+        span = high - low
+        return (coord - low) % span + low
+
+    # Функции проверки границ
+    def left_boundary(p):
+        return p[0] >= xmin
+
+    def right_boundary(p):
+        return p[0] <= xmax
+
+    def bottom_boundary(p):
+        return p[1] >= ymin
+
+    def top_boundary(p):
+        return p[1] <= ymax
+
+    # Последовательная обрезка по всем границам
+    clipped = clip_polygon_against_line(polygon, left_boundary, 'left', xmin, pbc)
+    clipped = clip_polygon_against_line(clipped, right_boundary, 'right', xmax, pbc)
+    clipped = clip_polygon_against_line(clipped, bottom_boundary, 'bottom', ymin, pbc)
+    clipped = clip_polygon_against_line(clipped, top_boundary, 'top', ymax, pbc)
+
+    # Перенос точек в основной диапазон для PBC
+    if pbc:
+        final = []
+        for (x, y) in clipped:
+            x_wrapped = wrap(x, xmin, xmax)
+            y_wrapped = wrap(y, ymin, ymax)
+            final.append((x_wrapped, y_wrapped))
+        return final
+
+    return clipped
+
+
+def draw_voronoi(regions, vertices):
+    """
+    Отрисовка диаграммы Вороного с учетом PBC
+    """
+    glColor3f(0.0, 1.0, 0.2)
+    glLineWidth(1.2)
+
+    # Сдвиги для PBC
+    shifts = [-2.0, 0.0, 2.0]
+
+    for region in regions:
+        polygon = vertices[region]
+
+        # Отрисовка всех периодических копий
+        for dx in shifts:
+            for dy in shifts:
+                shifted_poly = [(x + dx, y + dy) for (x, y) in polygon]
+                clipped = clip_polygon_to_box(shifted_poly, pbc=True)
+
+                if len(clipped) >= 3:
+                    glBegin(GL_LINE_LOOP)
+                    for (x, y) in clipped:
+                        glVertex2f(x, y)
+                    glEnd()
+
+
+def voronoi_finite_polygons_2d(vor, radius=None):
+    """Модифицированная функция с учётом PBC"""
+    # Добавляем периодические копии точек
+    expanded_points = np.concatenate([
+        vor.points + [dx, dy]
+        for dx in [-2, 0, 2]
+        for dy in [-2, 0, 2]
+    ])
+
+    # Пересчитываем Вороного для расширенной системы
+    vor_expanded = Voronoi(expanded_points)
+
+    # Фильтруем только центральные регионы
+    center_mask = (vor_expanded.points[:, 0] >= -1) & (vor_expanded.points[:, 0] <= 1) &(vor_expanded.points[:, 1] >= -1) & (vor_expanded.points[:, 1] <= 1)
+
+
+    center_regions = []
+    for idx in np.where(center_mask)[0]:
+        region = vor_expanded.regions[vor_expanded.point_region[idx]]
+        if -1 not in region:
+            center_regions.append(region)
+
+    return center_regions, vor_expanded.vertices
+-----------------------------------------
+
+
+  # График кумулятивного распределения
+    plt.subplot(1, 2, 2)
+    sorted_areas = np.sort(areas)
+    cdf = np.arange(1, len(sorted_areas) + 1) / len(sorted_areas)
+    plt.plot(sorted_areas, cdf, marker='.', linestyle='none')
+    plt.xlabel('Площадь ячейки')
+    plt.ylabel('CDF')
+    plt.title(f'Полуширина: {half_width:.3f}')
+    plt.grid(True)
